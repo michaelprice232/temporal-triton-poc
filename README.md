@@ -56,7 +56,7 @@ result comes back as a human-readable label ("COFFEE MUG").
 Each directory is a self-contained step with its own README. Follow them top to
 bottom.
 
-1. **[`01-infra-eks-aurora-efs/`](./01-infra-eks-aurora-efs/)** — Provision the
+1. **[`01-base-infra/`](./01-base-infra/)** — Provision the
    EKS Auto Mode cluster, the Aurora PostgreSQL Serverless v2 cluster (+ the two
    databases), and EFS with the dynamic `efs-sc` StorageClass.
 
