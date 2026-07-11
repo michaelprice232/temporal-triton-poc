@@ -1,0 +1,90 @@
+# Temporal Helm chart values — external Aurora PostgreSQL (Serverless v2)
+# Chart: temporalio/temporal 1.5.0  (appVersion / images: Temporal 1.31.1)
+#
+# Prerequisites (done outside this file):
+#   1. Aurora PostgreSQL cluster created.
+#   2. Two EMPTY databases pre-created on the cluster:
+#         temporal
+#         temporal_visibility
+#      (owned by / accessible to the user below). The chart fills the schema.
+#   3. A k8s secret holding the DB password — created by install-temporal.sh:
+#         secret: temporal-db-passwords   key: password
+#
+# Point the stores at the Aurora WRITER (cluster) endpoint — schema DDL must hit the primary.
+
+server:
+  # POC: one replica per role (frontend/history/matching/worker). Scale up later.
+  replicaCount: 1
+
+  config:
+    # numHistoryShards is IMMUTABLE after the first install. 512 is a safe default.
+    persistence:
+      defaultStore: default
+      visibilityStore: visibility
+      numHistoryShards: 512
+
+      datastores:
+        # ---- core / history store ----
+        default:
+          sql:
+            pluginName: postgres12
+            databaseName: temporal
+            connectAddr: "REPLACE_AURORA_WRITER_ENDPOINT:5432"
+            connectProtocol: "tcp"
+            user: postgres
+            # Password comes from the pre-created secret (never written to the configmap):
+            existingSecret: temporal-db-passwords
+            secretKey: password
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
+            # DBs are pre-created empty -> don't run create-database, but DO manage schema:
+            createDatabase: false
+            manageSchema: true
+            # Aurora may enforce TLS (rds.force_ssl=1). Encrypt without cert verification
+            # for the POC -> no CA cert needs mounting. Equivalent to sslmode=require.
+            tls:
+              enabled: true
+              enableHostVerification: false
+
+        # ---- visibility store (SQL / advanced visibility, no Elasticsearch) ----
+        visibility:
+          sql:
+            pluginName: postgres12
+            databaseName: temporal_visibility
+            connectAddr: "REPLACE_AURORA_WRITER_ENDPOINT:5432"
+            connectProtocol: "tcp"
+            user: postgres
+            existingSecret: temporal-db-passwords
+            secretKey: password
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
+            createDatabase: false
+            manageSchema: true
+            tls:
+              enabled: true
+              enableHostVerification: false
+
+    # Register a usable namespace on install (optional but convenient for a POC).
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 3d
+
+# Schema setup runs as a Helm pre-install/pre-upgrade hook (setup-schema + update-schema)
+# against the two pre-created databases. update-schema is idempotent and re-runs safely
+# on every `helm upgrade` (this is how Temporal version bumps migrate the schema).
+schema:
+  useHelmHooks: true
+
+# Temporal 1.30+ images (we're on 1.31.1) don't need the 1.29 compatibility shims.
+shims:
+  dockerize: false
+  elasticsearchTool: false
+
+# Web UI — handy for a POC. Reach it with:
+#   kubectl -n temporal port-forward svc/temporal-web 8080:8080
+web:
+  enabled: true

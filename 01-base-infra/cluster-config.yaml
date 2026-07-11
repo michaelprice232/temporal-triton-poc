@@ -1,0 +1,44 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: temporal-eks
+  region: eu-west-2          # London
+  # version is intentionally omitted so eksctl selects its current default
+  # supported Kubernetes version. Pin it (e.g. version: "1.33") if you need
+  # a reproducible version across runs.
+  tags:
+    project: temporal
+    managed-by: eksctl
+
+# --- EKS Auto Mode -----------------------------------------------------------
+# Auto Mode lets EKS manage compute, scaling, and (block) storage for you.
+# eksctl provisions the "general-purpose" node pool by default
+# and wires up the required Auto Mode IAM role automatically.
+autoModeConfig:
+  enabled: true
+  nodePools:
+    - general-purpose
+
+# --- Networking / VPC --------------------------------------------------------
+# eksctl creates a new VPC. A single NAT gateway keeps cost down (one NAT +
+# one EIP + hourly charge) at the expense of AZ-level NAT redundancy.
+vpc:
+  nat:
+    gateway: Single
+
+# --- Add-ons -----------------------------------------------------------------
+# autoApplyPodIdentityAssociations makes eksctl create the EKS Pod Identity
+# associations (IAM roles) that these CSI drivers need. Auto Mode clusters use
+# Pod Identity rather than IRSA, so this is the right mechanism here.
+addonsConfig:
+  autoApplyPodIdentityAssociations: true
+
+addons:
+  # EBS is handled by Auto Mode's built-in block-storage capability
+  # (provisioner "ebs.csi.eks.amazonaws.com"), so no EBS CSI add-on is needed.
+  #
+  # EFS is NOT part of Auto Mode, so this add-on is genuinely needed for EFS
+  # (ReadWriteMany) volumes. You still need an EFS filesystem + mount targets +
+  # a StorageClass before it can provision anything (see provision-efs.sh).
+  - name: aws-efs-csi-driver

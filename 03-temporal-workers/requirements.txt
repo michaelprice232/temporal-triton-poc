@@ -1,0 +1,5 @@
+temporalio==1.30.0
+# Triton client for the localhost sidecar call, + numpy/pillow for image preprocessing.
+tritonclient[http]
+numpy
+pillow

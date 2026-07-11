@@ -1,0 +1,37 @@
+# One-off converter pod in temporal-workers, mounting the SAME PVC the Triton
+# sidecar reads (triton-models). Convert models here -> the sidecar serves them.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: model-tools
+  namespace: temporal-workers
+  labels:
+    app: model-tools
+spec:
+  restartPolicy: Never
+  # High-clock-speed node for the (single-threaded) conversion work.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: eks.amazonaws.com/instance-cpu-sustained-clock-speed-mhz
+                operator: Gt
+                values: ["3499"]        # >= 3.5 GHz
+  containers:
+    - name: tools
+      image: ubuntu:22.04
+      command: ["sleep", "infinity"]
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          memory: "2Gi"
+      volumeMounts:
+        - name: models
+          mountPath: /models          # writable here (RW) so you can populate it
+  volumes:
+    - name: models
+      persistentVolumeClaim:
+        claimName: triton-models

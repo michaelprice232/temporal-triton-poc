@@ -1,0 +1,6 @@
+# App workers live in their own namespace, separate from the `temporal`
+# control-plane namespace. They reach the frontend over cluster DNS.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: temporal-workers

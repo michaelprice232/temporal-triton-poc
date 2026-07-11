@@ -1,0 +1,54 @@
+# Example: two pods sharing files over one EFS-backed ReadWriteMany volume.
+#
+#   kubectl apply -f efs-shared-example.yaml
+#   kubectl exec efs-writer -- cat /data/out.txt      # written by the writer
+#   kubectl exec efs-reader -- ls -l /data            # sees the same files
+#
+# The key to sharing is that BOTH pods reference the SAME PVC (efs-shared).
+# EFS supports ReadWriteMany, so many pods can mount it simultaneously.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-shared
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 5Gi        # ignored by EFS (elastic), but required by the API
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: efs-writer
+spec:
+  containers:
+    - name: writer
+      image: public.ecr.aws/docker/library/busybox:1.36
+      command: ["/bin/sh", "-c", "while true; do echo \"$(date) from writer\" >> /data/out.txt; sleep 10; done"]
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+  volumes:
+    - name: shared
+      persistentVolumeClaim:
+        claimName: efs-shared
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: efs-reader
+spec:
+  containers:
+    - name: reader
+      image: public.ecr.aws/docker/library/busybox:1.36
+      command: ["/bin/sh", "-c", "while true; do echo '--- /data ---'; cat /data/out.txt 2>/dev/null; sleep 15; done"]
+      volumeMounts:
+        - name: shared
+          mountPath: /data
+  volumes:
+    - name: shared
+      persistentVolumeClaim:
+        claimName: efs-shared

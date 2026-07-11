@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-worker-config
+  namespace: temporal-workers
+data:
+  # Cluster DNS of the self-hosted frontend (control plane is in the `temporal` ns).
+  TEMPORAL_ADDRESS: "temporal-frontend.temporal.svc.cluster.local:7233"
+  # This is the *Temporal* namespace (logical), NOT the k8s namespace.
+  TEMPORAL_NAMESPACE: "default"
+  TEMPORAL_TASK_QUEUE: "my-task-queue"

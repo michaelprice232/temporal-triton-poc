@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local secrets / env — never commit real values
+*.env
+.env
+kubeconfig
+*.kubeconfig
+
+# Terraform (if added later)
+.terraform/
+*.tfstate
+*.tfstate.*

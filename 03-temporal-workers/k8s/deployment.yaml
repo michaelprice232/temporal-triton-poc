@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-worker
+  namespace: temporal-workers
+  labels:
+    app: temporal-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-worker
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+    spec:
+      # Workers long-poll; give in-flight activities a moment to finish on stop.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          image: REPLACE_ECR_IMAGE
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: temporal-worker-config
+          env:
+            - name: TEMPORAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-worker-secret
+                  key: TEMPORAL_API_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # No HTTP health endpoint on a Temporal worker by default, so no probes
+          # here. Liveness = "process is up and polling"; the pod restarts on crash.

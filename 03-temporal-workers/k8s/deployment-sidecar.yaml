@@ -1,0 +1,96 @@
+# The "intended final config": Temporal worker (main car) + Triton (side car)
+# in one pod. The worker reaches Triton over localhost — no Service, no DNS.
+#
+# Triton runs as a NATIVE sidecar (an initContainer with restartPolicy: Always,
+# GA since k8s 1.29). That gives two guarantees over a plain second container:
+#   1. Triton starts before the worker's main container.
+#   2. The worker only starts once Triton passes its startupProbe (model ready),
+#      so the worker never polls for tasks before it can serve inference.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-worker-triton
+  namespace: temporal-workers
+  labels:
+    app: temporal-worker-triton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-worker-triton
+  template:
+    metadata:
+      labels:
+        app: temporal-worker-triton
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      initContainers:
+        - name: triton
+          image: nvcr.io/nvidia/tritonserver:26.06-py3
+          restartPolicy: Always          # <-- makes this a native sidecar
+          command: ["tritonserver"]
+          args:
+            - --model-repository=/models
+            - --exit-on-error=false
+          ports:
+            - { name: http, containerPort: 8000 }
+            - { name: grpc, containerPort: 8001 }
+            - { name: metrics, containerPort: 8002 }
+          # Main worker waits until this passes (Triton reports models ready).
+          startupProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 60          # up to ~5 min for model load
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: 8000
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              memory: "4Gi"
+              # FINAL GPU CONFIG: request a GPU here (and schedule onto a GPU
+              # nodegroup with the matching toleration/affinity), then drop the
+              # CPU-only assumptions:
+              # nvidia.com/gpu: 1
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true              # Triton only reads the repo
+
+      containers:
+        - name: worker
+          # Same image you already build/push for the plain worker — it now also
+          # registers InferenceWorkflow + triton_infer. Rebuild after the code change.
+          image: REPLACE_ECR_IMAGE
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: temporal-worker-config
+          env:
+            # Talk to the sidecar over the shared pod network namespace.
+            - name: TRITON_URL
+              value: "localhost:8000"
+            - name: TEMPORAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-worker-secret
+                  key: TEMPORAL_API_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              memory: "512Mi"
+
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: triton-models
